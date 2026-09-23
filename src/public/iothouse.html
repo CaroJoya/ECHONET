@@ -13,8 +13,41 @@
     <script src="js/appliances.js"></script>
     <script src="js/homeGW.js"></script>
     <script src="js/house.js"></script>
+    <style>
+      body { margin: 0; font-family: system-ui, sans-serif; background: #0f1216; }
+      #toast {
+        position: fixed;
+        top: 16px;
+        right: 16px;
+        padding: 10px 16px;
+        background: rgba(79, 140, 255, 0.92);
+        color: #fff;
+        border-radius: 8px;
+        font-size: 13px;
+        font-weight: 600;
+        box-shadow: 0 4px 16px rgba(79, 140, 255, 0.4);
+        opacity: 0;
+        transform: translateY(-8px);
+        transition: opacity 0.25s, transform 0.25s;
+        pointer-events: none;
+        z-index: 1000;
+        max-width: 320px;
+      }
+      #toast.show {
+        opacity: 1;
+        transform: translateY(0);
+        animation: toastFlash 0.6s ease-out;
+      }
+      @keyframes toastFlash {
+        0%   { box-shadow: 0 4px 16px rgba(79, 140, 255, 0.4); }
+        50%  { box-shadow: 0 4px 32px rgba(79, 140, 255, 0.9); }
+        100% { box-shadow: 0 4px 16px rgba(79, 140, 255, 0.4); }
+      }
+      #log { max-height: 120px; overflow-y: auto; color: #8b93a1; padding: 8px; font-size: 11px; }
+    </style>
  </head>
  <body>
+   <div id="toast"></div>
    <canvas id="canvas" width="700" height="500"></canvas>
    <small>
        <div id="log"></div>

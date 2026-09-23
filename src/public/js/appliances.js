@@ -192,12 +192,24 @@ class appliances_HomeAirConditioner{
    draw(ctx){
 
         const [x, y, w, h] = this.location;
-        ctx.drawImage(this.img,x,y,w,h);
         if(this.model.get_property('operationStatus') === true){
             this.draw_update_counter += 0.5;
+            const glowIntensity = 0.25 + 0.15 * Math.sin(this.draw_update_counter * 0.4);
+            ctx.save();
+            ctx.shadowColor = '#4f8cff';
+            ctx.shadowBlur = 35 + 15 * Math.sin(this.draw_update_counter * 0.3);
+            ctx.drawImage(this.img,x,y,w,h);
+            ctx.restore();
+            ctx.save();
+            ctx.globalAlpha = glowIntensity;
+            ctx.fillStyle = '#7cb0ff';
+            ctx.fillRect(x - 6, y - 6, w + 12, h + 12);
+            ctx.restore();
             if((this.draw_update_counter % 10) < 8){
                 ctx.drawImage(this.img_wind,x-5,y+50,w*0.85,h);
             }
+        }else{
+            ctx.drawImage(this.img,x,y,w,h);
         }
    }
 
@@ -338,17 +350,23 @@ class appliances_ElectricRainDoor{
        const open_control = this.model.get_property('openControl');
        let open_rate = this.model.get_property('openRate');
        if(open_control === 'close'){
-           open_rate -= 1.3; 
+           open_rate -= 4;
            if(open_rate <= 0){
                  open_rate = 0;
                  this.model.set_property('openControl','stop');
+                 this.model.set_property('openClosedStatus','fullyClosed');
+           }else{
+                 this.model.set_property('openClosedStatus','closing');
            }
            this.model.set_property('openRate',open_rate);
        }else if(open_control === 'open'){
-           open_rate += 1.3; 
+           open_rate += 4;
            if(open_rate >= 100){
                  open_rate = 100;
                  this.model.set_property('openControl','stop');
+                 this.model.set_property('openClosedStatus','fullyOpen');
+           }else{
+                 this.model.set_property('openClosedStatus','opening');
            }
            this.model.set_property('openRate',open_rate);
        }
@@ -358,7 +376,6 @@ class appliances_ElectricRainDoor{
        ctx.fillRect(x1,y1,w1,sh_height);
        ctx.fillRect(x2,y2,w2,sh_height);
 
-       // draw parts of shutter
        for (let l_y = 0 ; l_y < sh_height ; l_y = l_y + 16){
 	 ctx.beginPath();
 	 ctx.moveTo(x1, y1 + sh_height - l_y);

@@ -168,6 +168,29 @@ button.ghost:hover:not(:disabled) { background: var(--card-2); }
   outline: none;
   border-color: var(--accent);
 }
+#chat-send {
+  min-width: 68px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+#chat-send.thinking {
+  opacity: 0.85;
+  cursor: progress;
+}
+.spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(255,255,255,0.4);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  display: inline-block;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
 .mic-btn.listening {
   background: var(--off);
   border-color: var(--off);

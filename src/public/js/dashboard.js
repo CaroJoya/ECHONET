@@ -123,6 +123,7 @@ async function sendAction(deviceId, act) {
 /* ---------- AI chat ---------- */
 const chatLog = document.getElementById('chat-log');
 const chatText = document.getElementById('chat-text');
+const chatSendBtn = document.getElementById('chat-send');
 let typingEl = null;
 
 function addMsg(who, text) {
@@ -143,11 +144,27 @@ function hideTyping() {
   if (typingEl) { typingEl.remove(); typingEl = null; }
 }
 
+function showSendSpinner() {
+  chatSendBtn.classList.add('thinking');
+  chatSendBtn.disabled = true;
+  chatSendBtn.dataset.origText = chatSendBtn.textContent;
+  chatSendBtn.innerHTML = '<span class="spinner"></span>';
+}
+
+function hideSendSpinner() {
+  chatSendBtn.classList.remove('thinking');
+  chatSendBtn.disabled = false;
+  if (chatSendBtn.dataset.origText) {
+    chatSendBtn.textContent = chatSendBtn.dataset.origText;
+  }
+}
+
 async function sendChat(text) {
   if (!text.trim()) return;
   addMsg('user', text);
   chatText.value = '';
   showTyping();
+  showSendSpinner();
   try {
     const r = await fetch('/chat', {
       method: 'POST',
@@ -156,11 +173,13 @@ async function sendChat(text) {
     });
     const data = await r.json();
     hideTyping();
+    hideSendSpinner();
     addMsg('ai', data.reply || '(no reply)');
     logHistory('AI', data.reply || '');
     setTimeout(loadDevices, 500);
   } catch (e) {
     hideTyping();
+    hideSendSpinner();
     addMsg('ai', 'Error: ' + e.message);
   }
 }

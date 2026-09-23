@@ -76,13 +76,27 @@ const HOMEPAGE_TEMPLATE = fs.readFileSync('./templates/index.ejs', 'utf-8');
 let req_resp = [];
 let client_id = null;
 
+const DEVICE_NAME_MAP = {
+  'fe012345013001012345000000000000ff': 'AC',
+  'fe012345026f01012345000000000000ff': 'Lock',
+  'fe012345026301012345000000000000ff': 'Shutter'
+};
+
+function fmtAction(device_id, property, value) {
+  const name = DEVICE_NAME_MAP[device_id] || device_id.slice(0, 8);
+  let shortVal;
+  if (property === 'operationStatus') shortVal = value ? 'on' : 'off';
+  else if (property === 'lockStatus') shortVal = value;
+  else if (property === 'openControl') shortVal = value;
+  else shortVal = JSON.stringify(value);
+  return `${name} \u2192 ${shortVal}`;
+}
+
 //----------------------------------------
 //  Homepage (ELWebAPI Support Page)
 //----------------------------------------
 app.get('/', (req, res) => {
   let client_connection = '';
-  console.log('get /');
-
   if (client_id === null) {
     client_connection = 'not connected';
   } else {
@@ -101,7 +115,6 @@ app.get('/', (req, res) => {
 //  IoT House Simulator page
 //----------------------------------------
 app.get('/iothouse', (req, res) => {
-  console.log('get /iothouse');
   res.sendFile(__dirname + '/public/iothouse.html');
 });
 
@@ -109,7 +122,6 @@ app.get('/iothouse', (req, res) => {
 //  AI Dashboard page
 //----------------------------------------
 app.get('/dashboard', (req, res) => {
-  console.log('get /dashboard');
   res.sendFile(__dirname + '/public/dashboard.html');
 });
 
@@ -117,7 +129,6 @@ app.get('/dashboard', (req, res) => {
 //   ECHONET Lite Web API (ELWebAPI)
 //---------------------------------------
 app.get('/elapi', (req, res) => {
-  console.log('get /elapi');
   if (client_id === null) {
     res.send('Error!! IoT House Simulator is not connected');
     return;
@@ -131,7 +142,6 @@ app.get('/elapi', (req, res) => {
 });
 
 app.get('/elapi/v1', (req, res) => {
-  console.log('get /elapi/v1');
   if (client_id === null) {
     res.send('Error!! IoT House Simulator is not connected');
     return;
@@ -145,7 +155,6 @@ app.get('/elapi/v1', (req, res) => {
 });
 
 app.get('/elapi/v1/devices', (req, res) => {
-  console.log('get /elapi/v1/devices');
   if (client_id === null) {
     res.send('Error!! IoT House Simulator is not connected');
     return;
@@ -161,7 +170,6 @@ app.get('/elapi/v1/devices', (req, res) => {
 // Get Device Description
 app.get('/elapi/v1/devices/:device_id', (req, res) => {
   const device_id = req.params.device_id;
-  console.log('get /elapi/v1/devices/<device_id>');
   if (client_id === null) {
     res.send('Error!! IoT House Simulator is not connected');
     return;
@@ -177,7 +185,6 @@ app.get('/elapi/v1/devices/:device_id', (req, res) => {
 // Get Properties of Device
 app.get('/elapi/v1/devices/:device_id/properties', (req, res) => {
   const device_id = req.params.device_id;
-  console.log('get /elapi/v1/devices/<device_id>/properties');
   if (client_id === null) {
     res.send('Error!! IoT House Simulator is not connected');
     return;
@@ -194,7 +201,6 @@ app.get('/elapi/v1/devices/:device_id/properties', (req, res) => {
 app.get('/elapi/v1/devices/:device_id/properties/:property_name', (req, res) => {
   const device_id = req.params.device_id;
   const property_name = req.params.property_name;
-  console.log('get /elapi/v1/devices/<device_id>/properties/<property_name>');
   if (client_id === null) {
     res.send('Error!! IoT House Simulator is not connected');
     return;
@@ -213,7 +219,6 @@ app.put('/elapi/v1/devices/:device_id/properties/:property_name', (req, res) => 
   const property_name = req.params.property_name;
   const property_value = req.body[property_name];
 
-  console.log('set /elapi/v1/devices/<device_id>/properties/<property_name>');
   if (client_id === null) {
     res.send('Error!! IoT House Simulator is not connected');
     return;
@@ -229,6 +234,7 @@ app.put('/elapi/v1/devices/:device_id/properties/:property_name', (req, res) => 
   const msg = { procedure_name: procedure, args: args, request_id: request_id };
   io.emit('request', JSON.stringify(msg));
 
+  console.log(`\u2713 ${fmtAction(device_id, property_name, property_value)}`);
   history.log('http', `PUT ${device_id}.${property_name} = ${JSON.stringify(property_value)}`);
 
   receive_and_response(res);
@@ -261,13 +267,14 @@ app.post('/chat', async (req, res) => {
       };
       io.emit('request', JSON.stringify(msg));
       results.push({ sent: action });
+      console.log(`\u2713 ${fmtAction(action.device_id, action.property, action.value)}`);
       history.log('ai-action', `${action.device_id}.${action.property} = ${JSON.stringify(action.value)}`);
     }
 
     history.log('ai', plan.reply || '(no reply)');
     res.json({ reply: plan.reply || 'Done.', actions_sent: results });
   } catch (e) {
-    console.error('[chat] error:', e);
+    console.error('[chat] error:', e.message);
     res.status(500).json({ error: e.message });
   }
 });
@@ -302,9 +309,6 @@ async function receive_and_response(res) {
   for (let retry = 0; retry < 30; retry++) {
     await new Promise(resolve => setTimeout(resolve, 100));
 
-    if (req_resp.length > 1) {
-      console.log('internal Error: too many return values in buffer!!');
-    }
     if (req_resp.length >= 1) {
       const report = req_resp.pop();
       const body = JSON.stringify(report.value);
@@ -321,18 +325,13 @@ async function receive_and_response(res) {
 //   WebSocket: Server <---> IoT House Simulator
 //---------------------------------------
 io.on('connection', (socket) => {
-  console.log('connection');
-  client_id = socket.id;
-
   socket.on('hello', (msg) => {
     console.log('hello from client');
-    console.log(msg);
+    client_id = socket.id;
     io.emit('ack', 'received');
   });
 
   socket.on('response', (msg) => {
-    console.log('----response from client----');
-    console.log(msg);
     try {
       req_resp.push(JSON.parse(msg));
     } catch (e) {
@@ -342,8 +341,10 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', () => {
-    console.log('client disconnected');
-    if (socket.id === client_id) client_id = null;
+    if (socket.id === client_id) {
+      console.log('simulator disconnected');
+      client_id = null;
+    }
   });
 });
 
@@ -383,6 +384,7 @@ setInterval(async () => {
         request_id: Date.now()
       };
       io.emit('request', JSON.stringify(msg));
+      console.log(`\u2713 [rule] ${fmtAction(resolved.device_id, resolved.property, resolved.value)}`);
       history.log('rule', `${deviceName} → ${action}`);
     }
   );
@@ -393,6 +395,7 @@ setInterval(async () => {
 //---------------------------------------
 server.listen(listen_port, listen_ip, () => {
   console.log(`listen on ${listen_ip}:${listen_port}`);
+  console.log(`\u2713 Ready at http://${listen_ip}:${listen_port}`);
 });
 
 //---------------------------------------
@@ -410,15 +413,13 @@ function get_local_ip() {
         if (ip_addr === '127.0.0.1') {
           continue;
         } else {
-          console.log('this is IPv4 and IP is detected');
-          console.log(ip_addr);
           find_flag = true;
           break;
         }
       }
     }
     if (find_flag === true) break;
-    else console.log('Error! can not detect IP');
   }
+  if (!ip_addr) ip_addr = '127.0.0.1';
   return ip_addr;
 }

@@ -139,7 +139,7 @@ class HomeGW{
     //  func for hogeGW
     //
     set_device_list(device_list){
-            this.device_list = devlice_list;
+            this.device_list = device_list;
     }
 
     add_device(device_id, device_obj){
@@ -158,8 +158,7 @@ class HomeGW{
         let ret_val = null;
         let obj = JSON.parse(msg);
         let request_id = obj.request_id;
-        let response_id = request_id;     // !!!!<<< we should make response ID
-        console.log(obj);
+        let response_id = request_id;
         let procedure_name = obj.procedure_name
         
         if( procedure_name === 'get_property_value'){
@@ -180,6 +179,7 @@ class HomeGW{
              const property_name = obj.args.property_name;
              const property_value = obj.args.property_value;
              ret_val = this.set_property(device_id, property_name, property_value);
+             showDeviceToast(device_id, property_name, property_value);
 
          }else if( procedure_name === 'get_api_versions'){
              ret_val = this.get_ELAPI_versions();
@@ -204,9 +204,9 @@ class HomeGW{
     ws_report(msg){
         const t = new Date();
         const time = t.getTime()/1000 + ' [s<-c] report';
-        const log =  HR + time + '<br>'; // + '<br>' + HR;
-        const ret_msg = JSON.stringify(msg); // convert object -> JSON formata
-        this.socket.emit('report', {data: ret_msga});  
+        const log =  HR + time + '<br>';
+        const ret_msg = JSON.stringify(msg);
+        this.socket.emit('report', {data: ret_msg});
         document.getElementById('log').innerHTML += log;
     }
 
@@ -361,3 +361,27 @@ const ELAPI_V1_DESC = {
     }
   ]
 };
+
+const TOAST_DEVICE_NAMES = {
+  'fe012345013001012345000000000000ff': 'Air Conditioner',
+  'fe012345026f01012345000000000000ff': 'Front Door Lock',
+  'fe012345026301012345000000000000ff': 'Shutter'
+};
+
+let toastTimer = null;
+function showDeviceToast(device_id, property_name, property_value) {
+  const name = TOAST_DEVICE_NAMES[device_id] || 'Device';
+  let val;
+  if (property_name === 'operationStatus') val = property_value ? 'ON' : 'OFF';
+  else if (property_name === 'lockStatus') val = property_value === 'lock' ? 'LOCKED' : 'UNLOCKED';
+  else if (property_name === 'openControl') val = property_value.toUpperCase();
+  else val = JSON.stringify(property_value);
+  const el = document.getElementById('toast');
+  if (!el) return;
+  el.textContent = `⚙ ${name}: ${property_name} = ${val}`;
+  el.classList.remove('show');
+  void el.offsetWidth;
+  el.classList.add('show');
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2200);
+}
