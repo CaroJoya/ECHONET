@@ -1,6 +1,6 @@
 //------------------------------------------------------------------
 //
-// Smart Home Simualtor(1.1.0)
+// Smart Home Simualtor(1.1.1)
 // file:app.js
 //
 // 1.0.0   first  version
@@ -14,6 +14,7 @@
 // 1.0.8   2024/06/05 Changed device ID to general ID  (e.g. 012345FF)
 // 1.0.9   2024/12/07 support option (--ip,  --port)
 // 1.1.0   2025/xx/xx AI agent (Gemini), /chat, /dashboard, /rules, /history
+// 1.1.1   2025/xx/xx FIX: unique request_id per call (was fixed 111)
 //
 //------------------------------------------------------------------
 
@@ -76,6 +77,13 @@ const HOMEPAGE_TEMPLATE = fs.readFileSync('./templates/index.ejs', 'utf-8');
 let req_resp = [];
 let client_id = null;
 
+// ---- Unique request_id generator ----
+let __rid_counter = 0;
+function nextRequestId() {
+  __rid_counter = (__rid_counter + 1) % 100000;
+  return `${Date.now()}${__rid_counter.toString().padStart(5, '0')}`;
+}
+
 const DEVICE_NAME_MAP = {
   'fe012345013001012345000000000000ff': 'AC',
   'fe012345026f01012345000000000000ff': 'Lock',
@@ -135,10 +143,10 @@ app.get('/elapi', (req, res) => {
   }
   const procedure = 'get_api_versions';
   const args = '';
-  const request_id = 111;
+  const request_id = nextRequestId();
   const msg = { procedure_name: procedure, args: args, request_id: request_id };
   io.emit('request', JSON.stringify(msg));
-  receive_and_response(res);
+  receive_and_response(res, request_id);
 });
 
 app.get('/elapi/v1', (req, res) => {
@@ -148,10 +156,10 @@ app.get('/elapi/v1', (req, res) => {
   }
   const procedure = 'get_v1_descriptions';
   const args = '';
-  const request_id = 111;
+  const request_id = nextRequestId();
   const msg = { procedure_name: procedure, args: args, request_id: request_id };
   io.emit('request', JSON.stringify(msg));
-  receive_and_response(res);
+  receive_and_response(res, request_id);
 });
 
 app.get('/elapi/v1/devices', (req, res) => {
@@ -161,10 +169,10 @@ app.get('/elapi/v1/devices', (req, res) => {
   }
   const procedure = 'get_devices';
   const args = '';
-  const request_id = 111;
+  const request_id = nextRequestId();
   const msg = { procedure_name: procedure, args: args, request_id: request_id };
   io.emit('request', JSON.stringify(msg));
-  receive_and_response(res);
+  receive_and_response(res, request_id);
 });
 
 // Get Device Description
@@ -176,10 +184,10 @@ app.get('/elapi/v1/devices/:device_id', (req, res) => {
   }
   const procedure = 'get_description';
   const args = { device_id: device_id };
-  const request_id = 111;
+  const request_id = nextRequestId();
   const msg = { procedure_name: procedure, args: args, request_id: request_id };
   io.emit('request', JSON.stringify(msg));
-  receive_and_response(res);
+  receive_and_response(res, request_id);
 });
 
 // Get Properties of Device
@@ -191,10 +199,10 @@ app.get('/elapi/v1/devices/:device_id/properties', (req, res) => {
   }
   const procedure = 'get_properties';
   const args = { device_id: device_id };
-  const request_id = 111;
+  const request_id = nextRequestId();
   const msg = { procedure_name: procedure, args: args, request_id: request_id };
   io.emit('request', JSON.stringify(msg));
-  receive_and_response(res);
+  receive_and_response(res, request_id);
 });
 
 // Get Property of Device
@@ -207,10 +215,10 @@ app.get('/elapi/v1/devices/:device_id/properties/:property_name', (req, res) => 
   }
   const procedure = 'get_property_value';
   const args = { device_id: device_id, property_name: property_name };
-  const request_id = 111;
+  const request_id = nextRequestId();
   const msg = { procedure_name: procedure, args: args, request_id: request_id };
   io.emit('request', JSON.stringify(msg));
-  receive_and_response(res);
+  receive_and_response(res, request_id);
 });
 
 // PUT set property
@@ -230,14 +238,14 @@ app.put('/elapi/v1/devices/:device_id/properties/:property_name', (req, res) => 
     property_name: property_name,
     property_value: property_value
   };
-  const request_id = 111;
+  const request_id = nextRequestId();
   const msg = { procedure_name: procedure, args: args, request_id: request_id };
   io.emit('request', JSON.stringify(msg));
 
   console.log(`\u2713 ${fmtAction(device_id, property_name, property_value)}`);
   history.log('http', `PUT ${device_id}.${property_name} = ${JSON.stringify(property_value)}`);
 
-  receive_and_response(res);
+  receive_and_response(res, request_id);
 });
 
 //---------------------------------------
@@ -263,7 +271,7 @@ app.post('/chat', async (req, res) => {
           property_name: action.property,
           property_value: action.value
         },
-        request_id: Date.now()
+        request_id: nextRequestId()
       };
       io.emit('request', JSON.stringify(msg));
       results.push({ sent: action });
@@ -304,13 +312,17 @@ app.get('/history', (req, res) => res.json(history.list(50)));
 
 //---------------------------------------
 //   Wait for simulator response, send back to HTTP caller
+//   Matches by request_id so concurrent calls don't collide.
 //---------------------------------------
-async function receive_and_response(res) {
-  for (let retry = 0; retry < 30; retry++) {
-    await new Promise(resolve => setTimeout(resolve, 100));
+async function receive_and_response(res, request_id) {
+  const deadline = Date.now() + 3000;
+  while (Date.now() < deadline) {
+    await new Promise(resolve => setTimeout(resolve, 50));
 
-    if (req_resp.length >= 1) {
-      const report = req_resp.pop();
+    // Look for the entry that matches OUR request_id
+    const idx = req_resp.findIndex(entry => String(entry.response_id) === String(request_id));
+    if (idx !== -1) {
+      const report = req_resp.splice(idx, 1)[0];
       const body = JSON.stringify(report.value);
       res.set({ 'content-type': 'application/json; charset=utf-8' });
       res.send(body);
@@ -381,7 +393,7 @@ setInterval(async () => {
           property_name: resolved.property,
           property_value: resolved.value
         },
-        request_id: Date.now()
+        request_id: nextRequestId()
       };
       io.emit('request', JSON.stringify(msg));
       console.log(`\u2713 [rule] ${fmtAction(resolved.device_id, resolved.property, resolved.value)}`);
