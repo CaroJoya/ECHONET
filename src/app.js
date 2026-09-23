@@ -88,6 +88,20 @@ const HOMEPAGE_TEMPLATE = fs.readFileSync(path.join(__dirname, 'templates', 'ind
 
 let req_resp = [];
 let client_id = null;
+let simulator_socket = null;
+
+function markSimulator(socket) {
+  simulator_socket = socket;
+  client_id = socket.id;
+  console.log(`[sim] simulator connected (socket.id=${socket.id})`);
+}
+function clearSimulatorIfMatches(socket) {
+  if (simulator_socket === socket || (client_id && socket.id === client_id)) {
+    console.log(`[sim] simulator disconnected (socket.id=${socket.id})`);
+    simulator_socket = null;
+    client_id = null;
+  }
+}
 
 // ---- Unique request_id generator ----
 let __rid_counter = 0;
@@ -374,8 +388,11 @@ async function receive_and_response(res, request_id) {
 //---------------------------------------
 io.on('connection', (socket) => {
   socket.on('hello', (msg) => {
+    if (simulator_socket && simulator_socket !== socket) {
+      console.log('[sim] another client also sent hello; keeping current simulator');
+    }
+    markSimulator(socket);
     console.log('hello from client');
-    client_id = socket.id;
     io.emit('ack', 'received');
   });
 
@@ -389,10 +406,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', () => {
-    if (socket.id === client_id) {
-      console.log('simulator disconnected');
-      client_id = null;
-    }
+    clearSimulatorIfMatches(socket);
   });
 });
 
