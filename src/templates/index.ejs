@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ECHONET Lite Web API Simulator (v1.0.9)</title>
+  <style>
+    :root {
+      --bg: #0f1216;
+      --card: #171b21;
+      --card-2: #1e232b;
+      --text: #e6e8eb;
+      --muted: #8b93a1;
+      --accent: #4f8cff;
+      --ok: #3ddc84;
+      --off: #ff5c5c;
+      --border: #262c36;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+
+    /* ---------- Top nav ---------- */
+    .topnav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 24px;
+      border-bottom: 1px solid var(--border);
+      background: var(--card);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    .topnav h1 { font-size: 18px; margin: 0; }
+    .topnav .links { display: flex; gap: 10px; }
+    .topnav a.btn {
+      padding: 8px 14px;
+      border-radius: 8px;
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 600;
+      border: 1px solid var(--border);
+      color: var(--text);
+      background: var(--card-2);
+      transition: all 0.15s;
+    }
+    .topnav a.btn:hover { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .topnav a.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .topnav a.btn.primary:hover { filter: brightness(1.15); }
+
+    /* ---------- Layout ---------- */
+    .container { max-width: 1100px; margin: 0 auto; padding: 24px; }
+    h2 {
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      margin: 28px 0 12px;
+    }
+
+    /* ---------- Status strip ---------- */
+    .status-strip {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 24px;
+    }
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 14px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 600;
+      border: 1px solid var(--border);
+      background: var(--card);
+    }
+    .status-pill .dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--muted);
+    }
+    .status-pill.ok  { color: var(--ok);  border-color: rgba(61,220,132,0.4); }
+    .status-pill.ok  .dot { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
+    .status-pill.bad { color: var(--off); border-color: rgba(255,92,92,0.4); }
+    .status-pill.bad .dot { background: var(--off); box-shadow: 0 0 8px var(--off); }
+
+    /* ---------- Device cards ---------- */
+    .devices {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 14px;
+      margin-bottom: 24px;
+    }
+    .device-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+    }
+    .device-card h3 { margin: 0 0 4px; font-size: 15px; }
+    .device-card .type { color: var(--muted); font-size: 12px; margin-bottom: 12px; }
+    .device-card .state {
+      font-size: 13px;
+      padding: 6px 10px;
+      border-radius: 6px;
+      background: var(--card-2);
+      margin-bottom: 12px;
+      color: var(--muted);
+    }
+    .device-card .state.on  { color: var(--ok);  }
+    .device-card .state.off { color: var(--off); }
+    .device-card .row { display: flex; gap: 8px; }
+    .device-card button {
+      flex: 1;
+      padding: 8px;
+      border-radius: 8px;
+      border: none;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      background: var(--accent);
+      color: #fff;
+      transition: filter 0.15s;
+    }
+    .device-card button.ghost {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+    .device-card button:hover { filter: brightness(1.15); }
+
+    /* ---------- Tables ---------- */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      margin-bottom: 8px;
+      font-size: 13px;
+    }
+    th, td {
+      padding: 10px 12px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+    tr:last-child td { border-bottom: none; }
+    th { background: var(--card-2); color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
+    td a { color: var(--accent); text-decoration: none; word-break: break-all; }
+    td a:hover { text-decoration: underline; }
+    pre {
+      background: var(--card-2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 12px;
+      overflow-x: auto;
+      margin: 6px 0;
+      color: #c8d1dc;
+    }
+    .section-title {
+      font-size: 15px;
+      color: var(--text);
+      margin: 24px 0 10px;
+      font-weight: 600;
+    }
+    .section-title .tag {
+      font-size: 11px;
+      background: var(--card-2);
+      color: var(--muted);
+      padding: 3px 8px;
+      border-radius: 10px;
+      margin-left: 8px;
+      text-transform: none;
+      letter-spacing: 0;
+      font-weight: 500;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ============ TOP NAV ============ -->
+  <nav class="topnav">
+    <h1>🏠 ECHONET Lite Web API Simulator <span style="color:var(--muted);font-weight:400;">v1.0.9</span></h1>
+    <div class="links">
+      <a class="btn primary" href="/dashboard">AI Dashboard</a>
+      <a class="btn" href="/iothouse" target="_blank">IoT House</a>
+    </div>
+  </nav>
+
+  <div class="container">
+
+    <!-- ============ STATUS ============ -->
+    <div class="status-strip">
+      <span class="status-pill <%= connection_status === 'connected' ? 'ok' : 'bad' %>">
+        <span class="dot"></span>
+        IoT House: <%= connection_status %>
+      </span>
+      <span class="status-pill ok">
+        <span class="dot"></span>
+        Server: <%= server_status %>
+      </span>
+      <span class="status-pill">
+        <span class="dot" style="background:var(--accent)"></span>
+        <%= ip_address %>
+      </span>
+    </div>
+
+    <!-- ============ LIVE DEVICE CARDS ============ -->
+    <h2>Live Devices</h2>
+    <div class="devices" id="device-cards">
+      <p style="color:var(--muted);">Loading devices…</p>
+    </div>
+
+    <!-- ============ API URLS ============ -->
+    <h2>Web-API URL</h2>
+    <table>
+      <thead>
+        <tr><th>Function</th><th>Method</th><th>URL</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>ECHONET WebAPI</td><td>GET</td>
+          <td><a href="/elapi">http://<%= ip_address%>/elapi</a></td>
+        </tr>
+        <tr>
+          <td>ECHONET WebAPI V1 Descriptions</td><td>GET</td>
+          <td><a href="/elapi/v1">http://<%= ip_address%>/elapi/v1</a></td>
+        </tr>
+        <tr>
+          <td>Get device list</td><td>GET</td>
+          <td><a href="/elapi/v1/devices">http://<%= ip_address%>/elapi/v1/devices</a></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- ============ AC SECTION ============ -->
+    <div class="section-title">homeAirConditioner <span class="tag">air conditioner</span></div>
+    <table>
+      <thead><tr><th>Function</th><th>Method</th><th>URL</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Get device description</td><td>GET</td>
+          <td><a href="/elapi/v1/devices/fe012345013001012345000000000000ff">/elapi/v1/devices/fe012345013001012345000000000000ff</a></td>
+        </tr>
+        <tr>
+          <td>Get properties</td><td>GET</td>
+          <td><a href="/elapi/v1/devices/fe012345013001012345000000000000ff/properties">/elapi/v1/devices/.../properties</a></td>
+        </tr>
+        <tr>
+          <td>Get operationStatus</td><td>GET</td>
+          <td><a href="/elapi/v1/devices/fe012345013001012345000000000000ff/properties/operationStatus">/elapi/v1/devices/.../properties/operationStatus</a></td>
+        </tr>
+        <tr>
+          <td>Get roomTemperature</td><td>GET</td>
+          <td><a href="/elapi/v1/devices/fe012345013001012345000000000000ff/properties/roomTemperature">/elapi/v1/devices/.../properties/roomTemperature</a></td>
+        </tr>
+        <tr>
+          <td>Get outdoorTemperature</td><td>GET</td>
+          <td><a href="/elapi/v1/devices/fe012345013001012345000000000000ff/properties/outdoorTemperature">/elapi/v1/devices/.../properties/outdoorTemperature</a></td>
+        </tr>
+        <tr>
+          <td>Set operationStatus</td><td>PUT</td>
+          <td>
+            <code>/elapi/v1/devices/.../properties/operationStatus</code>
+<pre>BODY: { "operationStatus" : true }
+BODY: { "operationStatus" : false }
+
+curl -X PUT -H "Content-Type: application/json" \
+  -d '{"operationStatus" : false}' \
+  http://<%= ip_address%>/elapi/v1/devices/fe012345013001012345000000000000ff/properties/operationStatus</pre>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- ============ LOCK SECTION ============ -->
+    <div class="section-title">electricLock <span class="tag">door lock</span></div>
+    <table>
+      <thead><tr><th>Function</th><th>Method</th><th>URL</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Get device description</td><td>GET</td>
+          <td><a href="/elapi/v1/devices/fe012345026f01012345000000000000ff">/elapi/v1/devices/fe012345026f01012345000000000000ff</a></td>
+        </tr>
+        <tr>
+          <td>Get properties</td><td>GET</td>
+          <td><a href="/elapi/v1/devices/fe012345026f01012345000000000000ff/properties">/elapi/v1/devices/.../properties</a></td>
+        </tr>
+        <tr>
+          <td>Get lockStatus</td><td>GET</td>
+          <td><a href="/elapi/v1/devices/fe012345026f01012345000000000000ff/properties/lockStatus">/elapi/v1/devices/.../properties/lockStatus</a></td>
+        </tr>
+        <tr>
+          <td>Set lockStatus</td><td>PUT</td>
+          <td>
+            <code>/elapi/v1/devices/.../properties/lockStatus</code>
+<pre>BODY: { "lockStatus" : "lock" }
+BODY: { "lockStatus" : "unlock" }
+
+curl -X PUT -H "Content-Type: application/json" \
+  -d '{"lockStatus" : "lock"}' \
+  http://<%= ip_address%>/elapi/v1/devices/fe012345026f01012345000000000000ff/properties/lockStatus</pre>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- ============ SHUTTER SECTION ============ -->
+    <div class="section-title">electricRainDoor <span class="tag">shutter / rain door</span></div>
+    <table>
+      <thead><tr><th>Function</th><th>Method</th><th>URL</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Get device description</td><td>GET</td>
+          <td><a href="/elapi/v1/devices/fe012345026301012345000000000000ff">/elapi/v1/devices/fe012345026301012345000000000000ff</a></td>
+        </tr>
+        <tr>
+          <td>Get properties</td><td>GET</td>
+          <td><a href="/elapi/v1/devices/fe012345026301012345000000000000ff/properties">/elapi/v1/devices/.../properties</a></td>
+        </tr>
+        <tr>
+          <td>Get openClosedStatus</td><td>GET</td>
+          <td><a href="/elapi/v1/devices/fe012345026301012345000000000000ff/properties/openClosedStatus">/elapi/v1/devices/.../properties/openClosedStatus</a></td>
+        </tr>
+        <tr>
+          <td>Set openControl</td><td>PUT</td>
+          <td>
+            <code>/elapi/v1/devices/.../properties/openControl</code>
+<pre>BODY: { "openControl" : "open" }
+BODY: { "openControl" : "close" }
+BODY: { "openControl" : "stop" }
+BODY: { "openControl" : "halfopen" }
+
+curl -X PUT -H "Content-Type: application/json" \
+  -d '{"openControl" : "open"}' \
+  http://<%= ip_address%>/elapi/v1/devices/fe012345026301012345000000000000ff/properties/openControl</pre>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+  </div>
+
+  <!-- ============ LIVE DEVICE CARD LOGIC ============ -->
+  <script>
+    // Small script to fetch /elapi/v1/devices and render quick control cards.
+    // Re-uses the existing ECHONET API — no new backend needed.
+
+    const DEVICE_MAP = {
+      'fe012345013001012345000000000000ff': { name: 'Air Conditioner', type: 'AC',   onProp: 'operationStatus', onVal: true,  offVal: false },
+      'fe012345026f01012345000000000000ff': { name: 'Front Door Lock', type: 'Lock', onProp: 'lockStatus',      onVal: 'lock', offVal: 'unlock' },
+      'fe012345026301012345000000000000ff': { name: 'Rain Door',       type: 'Shutter', onProp: 'openControl',  onVal: 'open', offVal: 'close' }
+    };
+
+    async function fetchDeviceState(id) {
+      try {
+        const r = await fetch('/elapi/v1/devices/' + id + '/properties/' + DEVICE_MAP[id].onProp);
+        const j = await r.json();
+        return j.value !== undefined ? j.value : j[DEVICE_MAP[id].onProp];
+      } catch (e) {
+        return null;
+      }
+    }
+
+    async function setDeviceState(id, value) {
+      const prop = DEVICE_MAP[id].onProp;
+      await fetch('/elapi/v1/devices/' + id + '/properties/' + prop, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [prop]: value })
+      });
+      setTimeout(renderCards, 400);
+    }
+
+    async function renderCards() {
+      const wrap = document.getElementById('device-cards');
+      const ids = Object.keys(DEVICE_MAP);
+      const states = await Promise.all(ids.map(fetchDeviceState));
+
+      wrap.innerHTML = '';
+      ids.forEach((id, i) => {
+        const d = DEVICE_MAP[id];
+        const state = states[i];
+        const isOn = state === d.onVal || state === true || state === 'lock' || state === 'open';
+
+        const card = document.createElement('div');
+        card.className = 'device-card';
+        card.innerHTML = `
+          <h3>${d.name}</h3>
+          <div class="type">${d.type}</div>
+          <div class="state ${isOn ? 'on' : 'off'}">
+            State: ${state !== null ? JSON.stringify(state) : 'unknown'}
+          </div>
+          <div class="row">
+            <button data-act="on">Turn On</button>
+            <button class="ghost" data-act="off">Turn Off</button>
+          </div>
+        `;
+        card.querySelector('[data-act="on"]').onclick  = () => setDeviceState(id, d.onVal);
+        card.querySelector('[data-act="off"]').onclick = () => setDeviceState(id, d.offVal);
+        wrap.appendChild(card);
+      });
+    }
+
+    renderCards();
+    setInterval(renderCards, 5000);
+  </script>
+
+</body>
+</html>

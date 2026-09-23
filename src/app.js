@@ -1,0 +1,418 @@
+//------------------------------------------------------------------
+//
+// Smart Home Simualtor(1.1.0)
+// file:app.js
+//
+// 1.0.0   first  version
+// 1.0.1   fix bug (miss find local ip)  2024/1/2
+// 1.0.2   change listen port 8085 -> 8010  2024/1/10
+// 1.0.3   2024/01/21 change connection status:  offline -> online
+// 1.0.4   2024/01/21 modify get_properties (change to reply all properties)
+// 1.0.5   2024/01/25 modify get_property (change json format)
+// 1.0.6   2024/02/18 modify device id for common  e.g. 00000  or 012345
+// 1.0.7   2024/03/01 Changed device ID to general ID  (e.g. 012345)
+// 1.0.8   2024/06/05 Changed device ID to general ID  (e.g. 012345FF)
+// 1.0.9   2024/12/07 support option (--ip,  --port)
+// 1.1.0   2025/xx/xx AI agent (Gemini), /chat, /dashboard, /rules, /history
+//
+//------------------------------------------------------------------
+
+const os = require('os');
+const express = require('express');
+const app = express();
+const http = require('http');
+const server = http.createServer(app);
+const { Server } = require('socket.io');
+const io = new Server(server);
+
+const yargs = require('yargs/yargs');
+const { hideBin } = require('yargs/helpers');
+
+// ---- AI agent ----
+require('dotenv').config();
+const { planFromText } = require('./agent/agent');
+const rules = require('./agent/rules');
+const history = require('./agent/history');
+
+// setting for parse body of HTTP POST
+const bodyParser = require('body-parser');
+app.use(bodyParser.urlencoded({ extended: true }));
+app.use(bodyParser.json());
+
+// set ejs to view engine
+const ejs = require('ejs');
+
+const DEFAULT_PORT = 8010;
+
+// Handle string option arguments
+const argv = yargs(hideBin(process.argv))
+  .option('port', { type: 'string', description: 'port number' })
+  .option('ip',   { type: 'string', description: 'ip address' })
+  .help()
+  .argv;
+
+let listen_ip;
+let listen_port;
+
+if (argv.ip != undefined) {
+  listen_ip = argv.ip;
+} else {
+  listen_ip = get_local_ip();
+}
+if (argv.port != undefined) {
+  listen_port = argv.port;
+} else {
+  listen_port = DEFAULT_PORT;
+}
+
+// ---- Static file routes ----
+app.use('/js', express.static(__dirname + '/public/js'));
+app.use('/js/img', express.static(__dirname + '/public/img'));
+app.use('/css', express.static(__dirname + '/public/css'));
+
+const fs = require('fs');
+const HOMEPAGE_TEMPLATE = fs.readFileSync('./templates/index.ejs', 'utf-8');
+
+let req_resp = [];
+let client_id = null;
+
+//----------------------------------------
+//  Homepage (ELWebAPI Support Page)
+//----------------------------------------
+app.get('/', (req, res) => {
+  let client_connection = '';
+  console.log('get /');
+
+  if (client_id === null) {
+    client_connection = 'not connected';
+  } else {
+    client_connection = 'connected';
+  }
+
+  const data = ejs.render(HOMEPAGE_TEMPLATE, {
+    connection_status: client_connection,
+    server_status: 'ok',
+    ip_address: `${listen_ip}:${listen_port}`
+  });
+  res.send(data);
+});
+
+//----------------------------------------
+//  IoT House Simulator page
+//----------------------------------------
+app.get('/iothouse', (req, res) => {
+  console.log('get /iothouse');
+  res.sendFile(__dirname + '/public/iothouse.html');
+});
+
+//----------------------------------------
+//  AI Dashboard page
+//----------------------------------------
+app.get('/dashboard', (req, res) => {
+  console.log('get /dashboard');
+  res.sendFile(__dirname + '/public/dashboard.html');
+});
+
+//---------------------------------------
+//   ECHONET Lite Web API (ELWebAPI)
+//---------------------------------------
+app.get('/elapi', (req, res) => {
+  console.log('get /elapi');
+  if (client_id === null) {
+    res.send('Error!! IoT House Simulator is not connected');
+    return;
+  }
+  const procedure = 'get_api_versions';
+  const args = '';
+  const request_id = 111;
+  const msg = { procedure_name: procedure, args: args, request_id: request_id };
+  io.emit('request', JSON.stringify(msg));
+  receive_and_response(res);
+});
+
+app.get('/elapi/v1', (req, res) => {
+  console.log('get /elapi/v1');
+  if (client_id === null) {
+    res.send('Error!! IoT House Simulator is not connected');
+    return;
+  }
+  const procedure = 'get_v1_descriptions';
+  const args = '';
+  const request_id = 111;
+  const msg = { procedure_name: procedure, args: args, request_id: request_id };
+  io.emit('request', JSON.stringify(msg));
+  receive_and_response(res);
+});
+
+app.get('/elapi/v1/devices', (req, res) => {
+  console.log('get /elapi/v1/devices');
+  if (client_id === null) {
+    res.send('Error!! IoT House Simulator is not connected');
+    return;
+  }
+  const procedure = 'get_devices';
+  const args = '';
+  const request_id = 111;
+  const msg = { procedure_name: procedure, args: args, request_id: request_id };
+  io.emit('request', JSON.stringify(msg));
+  receive_and_response(res);
+});
+
+// Get Device Description
+app.get('/elapi/v1/devices/:device_id', (req, res) => {
+  const device_id = req.params.device_id;
+  console.log('get /elapi/v1/devices/<device_id>');
+  if (client_id === null) {
+    res.send('Error!! IoT House Simulator is not connected');
+    return;
+  }
+  const procedure = 'get_description';
+  const args = { device_id: device_id };
+  const request_id = 111;
+  const msg = { procedure_name: procedure, args: args, request_id: request_id };
+  io.emit('request', JSON.stringify(msg));
+  receive_and_response(res);
+});
+
+// Get Properties of Device
+app.get('/elapi/v1/devices/:device_id/properties', (req, res) => {
+  const device_id = req.params.device_id;
+  console.log('get /elapi/v1/devices/<device_id>/properties');
+  if (client_id === null) {
+    res.send('Error!! IoT House Simulator is not connected');
+    return;
+  }
+  const procedure = 'get_properties';
+  const args = { device_id: device_id };
+  const request_id = 111;
+  const msg = { procedure_name: procedure, args: args, request_id: request_id };
+  io.emit('request', JSON.stringify(msg));
+  receive_and_response(res);
+});
+
+// Get Property of Device
+app.get('/elapi/v1/devices/:device_id/properties/:property_name', (req, res) => {
+  const device_id = req.params.device_id;
+  const property_name = req.params.property_name;
+  console.log('get /elapi/v1/devices/<device_id>/properties/<property_name>');
+  if (client_id === null) {
+    res.send('Error!! IoT House Simulator is not connected');
+    return;
+  }
+  const procedure = 'get_property_value';
+  const args = { device_id: device_id, property_name: property_name };
+  const request_id = 111;
+  const msg = { procedure_name: procedure, args: args, request_id: request_id };
+  io.emit('request', JSON.stringify(msg));
+  receive_and_response(res);
+});
+
+// PUT set property
+app.put('/elapi/v1/devices/:device_id/properties/:property_name', (req, res) => {
+  const device_id = req.params.device_id;
+  const property_name = req.params.property_name;
+  const property_value = req.body[property_name];
+
+  console.log('set /elapi/v1/devices/<device_id>/properties/<property_name>');
+  if (client_id === null) {
+    res.send('Error!! IoT House Simulator is not connected');
+    return;
+  }
+
+  const procedure = 'set_property_value';
+  const args = {
+    device_id: device_id,
+    property_name: property_name,
+    property_value: property_value
+  };
+  const request_id = 111;
+  const msg = { procedure_name: procedure, args: args, request_id: request_id };
+  io.emit('request', JSON.stringify(msg));
+
+  history.log('http', `PUT ${device_id}.${property_name} = ${JSON.stringify(property_value)}`);
+
+  receive_and_response(res);
+});
+
+//---------------------------------------
+//   AI Agent endpoint (natural language)
+//   POST /chat  { "message": "turn on the AC" }
+//---------------------------------------
+app.post('/chat', async (req, res) => {
+  const userText = (req.body && req.body.message) || '';
+  if (!userText.trim()) {
+    return res.status(400).json({ error: 'Missing "message" in body' });
+  }
+
+  try {
+    history.log('user', userText);
+    const plan = await planFromText(userText);
+    const results = [];
+
+    for (const action of (plan.actions || [])) {
+      const msg = {
+        procedure_name: 'set_property_value',
+        args: {
+          device_id: action.device_id,
+          property_name: action.property,
+          property_value: action.value
+        },
+        request_id: Date.now()
+      };
+      io.emit('request', JSON.stringify(msg));
+      results.push({ sent: action });
+      history.log('ai-action', `${action.device_id}.${action.property} = ${JSON.stringify(action.value)}`);
+    }
+
+    history.log('ai', plan.reply || '(no reply)');
+    res.json({ reply: plan.reply || 'Done.', actions_sent: results });
+  } catch (e) {
+    console.error('[chat] error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+//---------------------------------------
+//   Automation Rules API
+//---------------------------------------
+app.get('/rules', (req, res) => res.json(rules.list()));
+
+app.post('/rules', (req, res) => {
+  try {
+    res.json(rules.add(req.body));
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.delete('/rules/:id', (req, res) => {
+  rules.remove(req.params.id);
+  res.json({ ok: true });
+});
+
+//---------------------------------------
+//   History API
+//---------------------------------------
+app.get('/history', (req, res) => res.json(history.list(50)));
+
+//---------------------------------------
+//   Wait for simulator response, send back to HTTP caller
+//---------------------------------------
+async function receive_and_response(res) {
+  for (let retry = 0; retry < 30; retry++) {
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    if (req_resp.length > 1) {
+      console.log('internal Error: too many return values in buffer!!');
+    }
+    if (req_resp.length >= 1) {
+      const report = req_resp.pop();
+      const body = JSON.stringify(report.value);
+      res.set({ 'content-type': 'application/json; charset=utf-8' });
+      res.send(body);
+      return true;
+    }
+  }
+  res.send('Error!! no response from [IoT Home Simulator]');
+  return true;
+}
+
+//---------------------------------------
+//   WebSocket: Server <---> IoT House Simulator
+//---------------------------------------
+io.on('connection', (socket) => {
+  console.log('connection');
+  client_id = socket.id;
+
+  socket.on('hello', (msg) => {
+    console.log('hello from client');
+    console.log(msg);
+    io.emit('ack', 'received');
+  });
+
+  socket.on('response', (msg) => {
+    console.log('----response from client----');
+    console.log(msg);
+    try {
+      req_resp.push(JSON.parse(msg));
+    } catch (e) {
+      console.error('bad response payload:', e.message);
+    }
+    io.emit('ack', 'received');
+  });
+
+  socket.on('disconnect', () => {
+    console.log('client disconnected');
+    if (socket.id === client_id) client_id = null;
+  });
+});
+
+//---------------------------------------
+//   Rules tick loop (every 15s)
+//---------------------------------------
+setInterval(async () => {
+  await rules.tick(
+    // readValue
+    async (deviceName, property) => {
+      const dev = require('./agent/devices').findByName(deviceName);
+      if (!dev) return null;
+      const url = `http://${listen_ip}:${listen_port}/elapi/v1/devices/${dev.id}/properties/${property}`;
+      try {
+        const r = await fetch(url);
+        const j = await r.json();
+        return j.value ?? j[property] ?? null;
+      } catch (e) {
+        return null;
+      }
+    },
+    // execute
+    async (deviceName, action) => {
+      const dev = require('./agent/devices').findByName(deviceName);
+      if (!dev) return;
+      const prop = ['lock', 'unlock'].includes(action) ? 'lockStatus' : 'operationStatus';
+      const value = action === 'on' ? true : action === 'off' ? false : action;
+      const msg = {
+        procedure_name: 'set_property_value',
+        args: { device_id: dev.id, property_name: prop, property_value: value },
+        request_id: Date.now()
+      };
+      io.emit('request', JSON.stringify(msg));
+      history.log('rule', `${dev.name} → ${action}`);
+    }
+  );
+}, 15000);
+
+//---------------------------------------
+//   Start server
+//---------------------------------------
+server.listen(listen_port, listen_ip, () => {
+  console.log(`listen on ${listen_ip}:${listen_port}`);
+});
+
+//---------------------------------------
+//   Helpers
+//---------------------------------------
+function get_local_ip() {
+  let ip_addr = null;
+  let find_flag = false;
+  const info = os.networkInterfaces();
+  for (let key of Object.keys(info)) {
+    if (key === 'lo') continue;
+    for (let obj of info[key]) {
+      if (obj.family === 'IPv4') {
+        ip_addr = obj.address;
+        if (ip_addr === '127.0.0.1') {
+          continue;
+        } else {
+          console.log('this is IPv4 and IP is detected');
+          console.log(ip_addr);
+          find_flag = true;
+          break;
+        }
+      }
+    }
+    if (find_flag === true) break;
+    else console.log('Error! can not detect IP');
+  }
+  return ip_addr;
+}

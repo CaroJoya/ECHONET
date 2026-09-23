@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Smart Home Dashboard</title>
+  <link rel="stylesheet" href="/css/dashboard.css" />
+</head>
+<body>
+  <header class="topbar">
+    <h1>🏠 Smart Home Dashboard</h1>
+    <span id="conn-status" class="status offline">● offline</span>
+  </header>
+
+  <main class="grid">
+    <!-- Devices -->
+    <section class="card span-2">
+      <h2>Devices</h2>
+      <div id="device-list" class="device-list">
+        <p class="muted">Loading devices…</p>
+      </div>
+    </section>
+
+    <!-- AI Chat -->
+    <section class="card">
+      <h2>AI Assistant</h2>
+      <div id="chat-log" class="chat-log"></div>
+      <div class="chat-input">
+        <input id="chat-text" type="text" placeholder="e.g. turn on the AC" />
+        <button id="chat-send" title="Send">➤</button>
+        <button id="voice-btn" title="Hold to talk">🎤</button>
+      </div>
+      <p id="voice-hint" class="muted small"></p>
+    </section>
+
+    <!-- Rules -->
+    <section class="card">
+      <h2>Automation Rules</h2>
+      <ul id="rules-list" class="rules-list"></ul>
+      <div class="rule-form">
+        <input id="rule-device"  placeholder="device (e.g. AC)" />
+        <input id="rule-prop"    placeholder="property (e.g. roomTemperature)" />
+        <input id="rule-op"      placeholder="operator (> < =)" />
+        <input id="rule-value"   placeholder="value (e.g. 30)" />
+        <input id="rule-action"  placeholder="action (on / off / lock)" />
+        <button id="rule-add">Add Rule</button>
+      </div>
+    </section>
+
+    <!-- History -->
+    <section class="card span-2">
+      <h2>Command History</h2>
+      <ul id="history-list" class="history-list">
+        <li class="muted">No activity yet.</li>
+      </ul>
+    </section>
+  </main>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/voice.js"></script>
+  <script src="/js/dashboard.js"></script>
+</body>
+</html>
