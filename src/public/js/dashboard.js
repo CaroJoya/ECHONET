@@ -171,16 +171,28 @@ async function sendChat(text) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message: text })
     });
-    const data = await r.json();
+    let data = {};
+    try {
+      data = await r.json();
+    } catch (_) {
+      data = {};
+    }
     hideTyping();
     hideSendSpinner();
-    addMsg('ai', data.reply || '(no reply)');
-    logHistory('AI', data.reply || '');
+    if (!r.ok) {
+      const msg = data && data.error ? data.error : `HTTP ${r.status} ${r.statusText}`;
+      addMsg('ai', 'Error: ' + msg);
+      logHistory('AI-Error', msg);
+      return;
+    }
+    const reply = (data && typeof data.reply === 'string' && data.reply.trim()) ? data.reply : 'Done.';
+    addMsg('ai', reply);
+    logHistory('AI', reply);
     setTimeout(loadDevices, 500);
   } catch (e) {
     hideTyping();
     hideSendSpinner();
-    addMsg('ai', 'Error: ' + e.message);
+    addMsg('ai', 'Network Error: ' + (e.message || String(e)));
   }
 }
 

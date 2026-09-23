@@ -30,7 +30,20 @@ const yargs = require('yargs/yargs');
 const { hideBin } = require('yargs/helpers');
 
 // ---- AI agent ----
-require('dotenv').config();
+const path = require('path');
+const fs = require('fs');
+const dotenv = require('dotenv');
+{
+  const envCandidates = [
+    path.resolve(__dirname, '.env'),
+    path.resolve(__dirname, '..', '.env'),
+    path.resolve(process.cwd(), '.env'),
+    path.resolve(process.cwd(), 'src', '.env')
+  ];
+  for (const p of envCandidates) {
+    if (fs.existsSync(p)) { dotenv.config({ path: p }); break; }
+  }
+}
 const { planFromText } = require('./agent/agent');
 const rules = require('./agent/rules');
 const history = require('./agent/history');
@@ -71,8 +84,7 @@ app.use('/js', express.static(__dirname + '/public/js'));
 app.use('/js/img', express.static(__dirname + '/public/img'));
 app.use('/css', express.static(__dirname + '/public/css'));
 
-const fs = require('fs');
-const HOMEPAGE_TEMPLATE = fs.readFileSync('./templates/index.ejs', 'utf-8');
+const HOMEPAGE_TEMPLATE = fs.readFileSync(path.join(__dirname, 'templates', 'index.ejs'), 'utf-8');
 
 let req_resp = [];
 let client_id = null;
@@ -261,9 +273,24 @@ app.post('/chat', async (req, res) => {
   try {
     history.log('user', userText);
     const plan = await planFromText(userText);
-    const results = [];
 
-    for (const action of (plan.actions || [])) {
+    if (!plan || typeof plan !== 'object') {
+      throw new Error('AI returned an invalid plan (not an object).');
+    }
+
+    const actions = Array.isArray(plan.actions) ? plan.actions : [];
+    const reply = typeof plan.reply === 'string' && plan.reply.trim() ? plan.reply : 'Okay.';
+
+    const results = [];
+    const simOffline = client_id === null;
+    if (simOffline && actions.length > 0) {
+      console.warn('[chat] simulator not connected; actions planned but not delivered. Open /iothouse to connect.');
+    }
+
+    for (const action of actions) {
+      if (!action || !action.device_id || !action.property || action.value === undefined) {
+        continue;
+      }
       const msg = {
         procedure_name: 'set_property_value',
         args: {
@@ -279,8 +306,17 @@ app.post('/chat', async (req, res) => {
       history.log('ai-action', `${action.device_id}.${action.property} = ${JSON.stringify(action.value)}`);
     }
 
-    history.log('ai', plan.reply || '(no reply)');
-    res.json({ reply: plan.reply || 'Done.', actions_sent: results });
+    let finalReply = reply;
+    if (simOffline && actions.length > 0) {
+      finalReply = reply + ' (Note: IoT House simulator is not open; open /iothouse in another tab to see device changes.)';
+    }
+
+    history.log('ai', finalReply);
+    res.json({
+      reply: finalReply,
+      actions_sent: results,
+      simulator_online: !simOffline
+    });
   } catch (e) {
     console.error('[chat] error:', e.message);
     res.status(500).json({ error: e.message });
