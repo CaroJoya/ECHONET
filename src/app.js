@@ -352,7 +352,7 @@ io.on('connection', (socket) => {
 //---------------------------------------
 setInterval(async () => {
   await rules.tick(
-    // readValue
+    // readValue — reads a property from a device via HTTP loopback
     async (deviceName, property) => {
       const dev = require('./agent/devices').findByName(deviceName);
       if (!dev) return null;
@@ -365,19 +365,25 @@ setInterval(async () => {
         return null;
       }
     },
-    // execute
+    // execute — resolves the correct property + value for the device/action
     async (deviceName, action) => {
-      const dev = require('./agent/devices').findByName(deviceName);
-      if (!dev) return;
-      const prop = ['lock', 'unlock'].includes(action) ? 'lockStatus' : 'operationStatus';
-      const value = action === 'on' ? true : action === 'off' ? false : action;
+      const { resolveAction } = require('./agent/devices');
+      const resolved = resolveAction(deviceName, action);
+      if (!resolved) {
+        console.warn(`[rules] unknown action: ${deviceName} → ${action}`);
+        return;
+      }
       const msg = {
         procedure_name: 'set_property_value',
-        args: { device_id: dev.id, property_name: prop, property_value: value },
+        args: {
+          device_id: resolved.device_id,
+          property_name: resolved.property,
+          property_value: resolved.value
+        },
         request_id: Date.now()
       };
       io.emit('request', JSON.stringify(msg));
-      history.log('rule', `${dev.name} → ${action}`);
+      history.log('rule', `${deviceName} → ${action}`);
     }
   );
 }, 15000);

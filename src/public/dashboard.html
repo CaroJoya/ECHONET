@@ -4,11 +4,12 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Smart Home Dashboard</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='24' font-size='24'>🏠</text></svg>" />
   <link rel="stylesheet" href="/css/dashboard.css" />
 </head>
 <body>
   <header class="topbar">
-    <h1>🏠 Smart Home Dashboard</h1>
+    <h1>Smart Home Dashboard</h1>
     <span id="conn-status" class="status offline">● offline</span>
   </header>
 
@@ -26,9 +27,9 @@
       <h2>AI Assistant</h2>
       <div id="chat-log" class="chat-log"></div>
       <div class="chat-input">
-        <input id="chat-text" type="text" placeholder="e.g. turn on the AC" />
-        <button id="chat-send" title="Send">➤</button>
-        <button id="voice-btn" title="Hold to talk">🎤</button>
+        <input id="chat-text" type="text" placeholder="e.g. turn on the AC" autocomplete="off" />
+        <button id="chat-send" title="Send">Send</button>
+        <button id="voice-btn" title="Hold to talk" class="mic-btn">Mic</button>
       </div>
       <p id="voice-hint" class="muted small"></p>
     </section>

@@ -13,19 +13,6 @@
     <script src="js/appliances.js"></script>
     <script src="js/homeGW.js"></script>
     <script src="js/house.js"></script>
-    <script>
-       const socket = io();
-
-       // --- Auto-connect handshake (fixes "not connected" on the API page) ---
-       socket.on('connect', () => {
-         console.log('[iothouse] connected, id =', socket.id);
-         socket.emit('hello', JSON.stringify({ msg: 'iothouse ready' }));
-       });
-
-       socket.on('disconnect', () => {
-         console.log('[iothouse] disconnected');
-       });
-    </script>
  </head>
  <body>
    <canvas id="canvas" width="700" height="500"></canvas>
