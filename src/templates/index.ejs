@@ -352,20 +352,38 @@ curl -X PUT -H "Content-Type: application/json" \
 
   <!-- ============ LIVE DEVICE CARD LOGIC ============ -->
   <script>
-    // Small script to fetch /elapi/v1/devices and render quick control cards.
-    // Re-uses the existing ECHONET API — no new backend needed.
+    // Render quick control cards for the three simulated devices.
+    // Uses the existing ECHONET API — no backend changes required.
 
     const DEVICE_MAP = {
-      'fe012345013001012345000000000000ff': { name: 'Air Conditioner', type: 'AC',   onProp: 'operationStatus', onVal: true,  offVal: false },
-      'fe012345026f01012345000000000000ff': { name: 'Front Door Lock', type: 'Lock', onProp: 'lockStatus',      onVal: 'lock', offVal: 'unlock' },
-      'fe012345026301012345000000000000ff': { name: 'Rain Door',       type: 'Shutter', onProp: 'openControl',  onVal: 'open', offVal: 'close' }
+      'fe012345013001012345000000000000ff': {
+        name: 'Air Conditioner', type: 'AC',
+        readProp: 'operationStatus',
+        onProp: 'operationStatus', onVal: true, offVal: false
+      },
+      'fe012345026f01012345000000000000ff': {
+        name: 'Front Door Lock', type: 'Lock',
+        readProp: 'lockStatus',
+        onProp: 'lockStatus', onVal: 'lock', offVal: 'unlock'
+      },
+      'fe012345026301012345000000000000ff': {
+        name: 'Rain Door', type: 'Shutter',
+        readProp: 'openClosedStatus',
+        onProp: 'openControl', onVal: 'open', offVal: 'close'
+      }
     };
 
     async function fetchDeviceState(id) {
+      const d = DEVICE_MAP[id];
       try {
-        const r = await fetch('/elapi/v1/devices/' + id + '/properties/' + DEVICE_MAP[id].onProp);
+        const r = await fetch('/elapi/v1/devices/' + id + '/properties/' + d.readProp);
         const j = await r.json();
-        return j.value !== undefined ? j.value : j[DEVICE_MAP[id].onProp];
+        // The API may return either { value: X } or { propName: X }
+        if (j && typeof j === 'object') {
+          if (j.value !== undefined) return j.value;
+          if (j[d.readProp] !== undefined) return j[d.readProp];
+        }
+        return j;
       } catch (e) {
         return null;
       }
@@ -373,12 +391,24 @@ curl -X PUT -H "Content-Type: application/json" \
 
     async function setDeviceState(id, value) {
       const prop = DEVICE_MAP[id].onProp;
-      await fetch('/elapi/v1/devices/' + id + '/properties/' + prop, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ [prop]: value })
-      });
+      try {
+        await fetch('/elapi/v1/devices/' + id + '/properties/' + prop, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ [prop]: value })
+        });
+      } catch (e) {
+        console.error('[device-card] set failed:', e);
+      }
       setTimeout(renderCards, 400);
+    }
+
+    function isOnState(id, state) {
+      if (state === null || state === undefined) return false;
+      if (id === 'fe012345013001012345000000000000ff') return state === true;
+      if (id === 'fe012345026f01012345000000000000ff') return state === 'lock';
+      if (id === 'fe012345026301012345000000000000ff') return state === 'fullyOpen' || state === 'opening';
+      return false;
     }
 
     async function renderCards() {
@@ -390,7 +420,7 @@ curl -X PUT -H "Content-Type: application/json" \
       ids.forEach((id, i) => {
         const d = DEVICE_MAP[id];
         const state = states[i];
-        const isOn = state === d.onVal || state === true || state === 'lock' || state === 'open';
+        const isOn = isOnState(id, state);
 
         const card = document.createElement('div');
         card.className = 'device-card';
@@ -398,7 +428,7 @@ curl -X PUT -H "Content-Type: application/json" \
           <h3>${d.name}</h3>
           <div class="type">${d.type}</div>
           <div class="state ${isOn ? 'on' : 'off'}">
-            State: ${state !== null ? JSON.stringify(state) : 'unknown'}
+            State: ${state !== null && state !== undefined ? JSON.stringify(state) : '—'}
           </div>
           <div class="row">
             <button data-act="on">Turn On</button>
